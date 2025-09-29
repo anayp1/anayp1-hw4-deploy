@@ -8,8 +8,10 @@ from flask import Flask, request, jsonify, abort
 
 app = Flask(__name__)
 
-# Path to the SQLite DB (same folder as this file)
-DB_PATH = os.path.join(os.path.dirname(__file__), "data.db")
+# ----- Database path (explicit, absolute) -----
+APP_DIR = os.path.dirname(__file__)
+DB_PATH = os.path.join(APP_DIR, "data.db")                 # data.db sits next to this file
+DB_URI = f"file:{DB_PATH}?mode=ro"                         # open read-only for safety
 
 # Allowed measure names (exact strings from the assignment)
 ALLOWED_MEASURES = {
@@ -29,26 +31,37 @@ ALLOWED_MEASURES = {
 
 ZIP_RE = re.compile(r"^\d{5}$")
 
+
 def get_db():
-    # read-only connection is fine; row_factory so we can jsonify rows easily
-    conn = sqlite3.connect(DB_PATH)
+    """
+    Open the SQLite DB in read-only mode, fail fast if the file is missing.
+    Using sqlite URI ensures no accidental writes and guards against destructive SQL.
+    """
+    if not os.path.exists(DB_PATH):
+        # This makes any path issues obvious in Render logs
+        raise FileNotFoundError(f"DB missing at {DB_PATH}")
+    conn = sqlite3.connect(DB_URI, uri=True)
     conn.row_factory = sqlite3.Row
     return conn
 
-# error handlers -> always JSON
+
+# ----- Error handlers -> always JSON -----
 @app.errorhandler(400)
 def bad_request(e):
     return jsonify(error="bad request"), 400
+
 
 @app.errorhandler(404)
 def not_found(e):
     return jsonify(error="not found"), 404
 
+
 @app.errorhandler(418)
 def teapot(e):
-    # fun one :)
     return jsonify(error="teapot"), 418
 
+
+# ----- API endpoint -----
 @app.post("/county_data")
 def county_data():
     # Must be JSON
@@ -76,9 +89,8 @@ def county_data():
     if not isinstance(measure_name, str):
         abort(400)
 
-    # Optional: enforce the whitelist exactly
+    # Enforce the whitelist exactly (per spec wording "should be one of")
     if measure_name not in ALLOWED_MEASURES:
-        # Spec says it "should" be one of these; treating others as bad request
         abort(400)
 
     # Parameterized, injection-safe query
@@ -122,6 +134,7 @@ def county_data():
     # Convert sqlite3.Row -> dict
     result = [dict(r) for r in rows]
     return jsonify(result), 200
+
 
 # For local dev only (Render will use gunicorn)
 if __name__ == "__main__":
