@@ -1,0 +1,14 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Envs
+.venv/
+venv/
+env/
+ENV/
+
+# Misc
+*.log
+.DS_Store
